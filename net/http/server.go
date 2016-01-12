@@ -2,7 +2,6 @@ package http
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -170,18 +169,34 @@ func handleConnection(conn net.Conn) {
 	ctx.Resp.Headers.Add(HTTP_HEAD_DATE, serve_time.Format(time.RFC1123))
 	ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTLENGTH, fmt.Sprintf("%d", len(ctx.Resp.Body)))
 
-	buffers := bytes.Buffer{}
-	buffers.WriteString(fmt.Sprintf("%s %d %s\r\n", ctx.Resp.Proto, ctx.Resp.StatusCode, StatusText(ctx.Resp.StatusCode)))
-	for k, v := range ctx.Resp.Headers {
-		for _, vv := range v {
-			buffers.WriteString(fmt.Sprintf("%s: %s\r\n", k, vv))
-		}
-	}
-	buffers.WriteString(CRLF)
-	buffers.WriteString(ctx.Resp.Body)
-	_, err = conn.Write(buffers.Bytes())
+	writer := bufio.NewWriter(conn)
+	_, err = writer.WriteString(fmt.Sprintf("%s %d %s\r\n", ctx.Resp.Proto, ctx.Resp.StatusCode, StatusText(ctx.Resp.StatusCode)))
 	if err != nil {
 		ErrLog.Println(err)
+	} else {
+		writer.Flush()
+	}
+	for k, v := range ctx.Resp.Headers {
+		for _, vv := range v {
+			_, err = writer.WriteString(fmt.Sprintf("%s: %s\r\n", k, vv))
+			if err != nil {
+				ErrLog.Println(err)
+			} else {
+				writer.Flush()
+			}
+		}
+	}
+	_, err = writer.WriteString(CRLF)
+	if err != nil {
+		ErrLog.Println(err)
+	} else {
+		writer.Flush()
+	}
+	_, err = writer.WriteString(ctx.Resp.Body)
+	if err != nil {
+		ErrLog.Println(err)
+	} else {
+		writer.Flush()
 	}
 	//	ctx.elapse = time.Now().Sub(serve_time)
 	log.Println(fmt.Sprintf(LOG_CONTEXT, ctx.ReqAddr.Host, "-", serve_time.Format(LOG_TIME_FORMAT), ctx.Req.Method, ctx.Req.Url.RawPath, ctx.Req.Proto, ctx.Resp.StatusCode, len(ctx.Req.Body), "-", ctx.Req.UserAgent, 0))
