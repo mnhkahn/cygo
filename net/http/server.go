@@ -1,9 +1,9 @@
 package http
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -24,6 +24,12 @@ var HTTP_METHOD = map[string]string{
 	//	"TRACE":   "TRACE",
 	"OPTIONS": "OPTIONS",
 	//	"DELETE":  "DELETE",
+}
+
+var SUPPORT_BODY_HTTP_METHOD = map[string]bool{
+	"POST":   true,
+	"PUT":    true,
+	"DELETE": true,
 }
 
 type Address struct {
@@ -92,13 +98,9 @@ func init() {
 	ViewPath = AppPath + "/views"
 	ViewsTemplFiles = make(map[string]string)
 
-	var err error
 	views, _ := ioutil.ReadDir(ViewPath)
 	for _, view := range views {
-		ViewsTemplFiles[view.Name()], err = ioutil.ReadFile(ViewPath + "/" + view.Name())
-		if err != nil {
-			ErrLog.Println(err)
-		}
+		ViewsTemplFiles[view.Name()] = ViewPath + "/" + view.Name()
 	}
 
 	DEFAULT_SERVER.Routes = NewRoute()
@@ -117,26 +119,32 @@ func handleConnection(conn net.Conn) {
 	ctx.Req = NewRequest()
 	ctx.Resp = NewResponse()
 
-	for {
-		buf := make([]byte, 1024)
-		reqLen, err := conn.Read(buf)
-		if reqLen > 0 && err == nil {
-			ctx.Req.Raw.Write(buf)
-			if reqLen < len(buf) && err == nil {
-				break
-			}
-		} else if err == io.EOF {
-			return
-		} else if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+	var err error
+
+	reader := bufio.NewReader(conn)
+
+	// Read header
+	i := 0
+	for ; ; i++ {
+		line, _, err := reader.ReadLine()
+		if len(line) == 0 || err != nil {
 			break
+		}
+		if i == 0 {
+			ctx.Req.ParseStartLine(line)
 		} else {
-			ErrLog.Println("Error to read message because of ", err, reqLen)
-			ctx.Resp.StatusCode = StatusInternalServerError
-			break
+			ctx.Req.ParseHeader(line)
 		}
 	}
 
-	ctx.Req.Init()
+	// Read body
+	if _, exists := SUPPORT_BODY_HTTP_METHOD[ctx.Req.Method]; exists {
+		line, _, err := reader.ReadLine()
+		if len(line) != 0 && err == nil {
+			ctx.Req.Body = string(line)
+		}
+	}
+
 	if ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR) != "" {
 		ctx.ReqAddr = NewAddress(ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR))
 	}
@@ -171,7 +179,7 @@ func handleConnection(conn net.Conn) {
 	}
 	buffers.WriteString(CRLF)
 	buffers.WriteString(ctx.Resp.Body)
-	_, err := conn.Write(buffers.Bytes())
+	_, err = conn.Write(buffers.Bytes())
 	if err != nil {
 		ErrLog.Println(err)
 	}

@@ -26,20 +26,13 @@ type Request struct {
 
 func NewRequest() *Request {
 	r := new(Request)
+	r.Headers = make(map[string][]string, 0)
+	r.Url = new(URL)
 	return r
 }
 
-func (this *Request) Init() {
-	b := string(this.Raw.Bytes())
-	if len(b) == 0 {
-		return
-	}
-
-	this.Headers = make(map[string][]string, 0)
-
-	this.Url = new(URL)
-
-	startLine := strings.Split(b[:strings.Index(b, CRLF)], " ")
+func (this *Request) ParseStartLine(line []byte) {
+	startLine := strings.Split(string(line), " ")
 	if len(startLine) == 3 {
 		this.Method, this.Url.RawPath, this.Proto = startLine[0], startLine[1], startLine[2]
 
@@ -59,24 +52,18 @@ func (this *Request) Init() {
 		}
 		this.Url.Fragment = raw[i+1:]
 	}
-	b = b[strings.Index(b, CRLF)+len(CRLF):]
+}
 
-	if strings.LastIndex(b, CRLF+CRLF) != -1 {
-		this.Body = b[strings.LastIndex(b, CRLF+CRLF):]
-		b = b[:strings.LastIndex(b, CRLF+CRLF)-2]
-	}
-	b = strings.TrimSpace(b)
-
-	for _, line := range strings.Split(b, CRLF) {
-		k, v := line[:strings.Index(line, ":")], line[strings.Index(line, ":")+1:]
-		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
-		if k == HTTP_HEAD_USERAGENT {
-			this.UserAgent = v
-		} else if k == HTTP_HEAD_HOST {
-			this.Host = v
-		} else {
-			this.Headers[k] = append(this.Headers[k], v)
-		}
+func (this *Request) ParseHeader(line []byte) {
+	l := string(line)
+	k, v := l[:strings.Index(l, ":")], l[strings.Index(l, ":")+1:]
+	k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+	if k == HTTP_HEAD_USERAGENT {
+		this.UserAgent = v
+	} else if k == HTTP_HEAD_HOST {
+		this.Host = v
+	} else {
+		this.Headers[k] = append(this.Headers[k], v)
 	}
 }
 
