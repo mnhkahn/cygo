@@ -1,11 +1,13 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strconv"
 	"strings"
+	"text/template"
 )
 
 var DEFAULT_CONTROLLER *Controller = new(Controller)
@@ -65,17 +67,34 @@ func (this *Controller) ServeJson(j interface{}) {
 func (this *Controller) ServeView(params ...interface{}) {
 	if len(params) <= 0 {
 
-	} else if len(params) == 1 {
+	} else {
 		if templ, exists := ViewsTemplFiles[params[0].(string)]; exists {
-			this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, "text/html; charset=utf-8")
-			v, _ := ioutil.ReadFile(templ)
-			this.Ctx.Resp.Body = string(v)
+			if len(params) == 1 {
+				this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, "text/html; charset=utf-8")
+				v, _ := ioutil.ReadFile(templ)
+				this.Ctx.Resp.Body = string(v)
+			} else if len(params) == 2 {
+				body := new(bytes.Buffer)
+
+				t, err := template.ParseFiles(templ)
+				if err != nil {
+					this.Ctx.Resp.Body = err.Error()
+					return
+				} else {
+					this.Ctx.Resp.Body = string(body.Bytes())
+				}
+
+				err = t.Execute(body, params[1])
+				if err != nil {
+					this.Ctx.Resp.Body = err.Error()
+				} else {
+					this.Ctx.Resp.Body = string(body.Bytes())
+				}
+			}
 		} else {
 			this.debugLog(fmt.Sprintf("Can't find the template file %v", params))
 			ErrLog.Println("Can't find the template file", params)
 		}
-	} else {
-
 	}
 }
 
