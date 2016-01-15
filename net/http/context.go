@@ -3,7 +3,7 @@ package http
 type Context struct {
 	Req     *Request
 	Resp    *Response
-	ReqAddr *Address
+	ReqAddr *Host
 	//	elapse time.Duration
 }
 

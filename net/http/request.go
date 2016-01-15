@@ -34,23 +34,9 @@ func NewRequest() *Request {
 func (this *Request) ParseStartLine(line []byte) {
 	startLine := strings.Split(string(line), " ")
 	if len(startLine) == 3 {
-		this.Method, this.Url.RawPath, this.Proto = startLine[0], startLine[1], startLine[2]
-
-		i := strings.Index(this.Url.RawPath, "?")
-		if i != -1 {
-			this.Url.Path = this.Url.RawPath[:i]
-		} else {
-			this.Url.Path = this.Url.RawPath
-		}
-
-		raw := this.Url.RawPath[i+1:]
-		i = strings.Index(raw, "#")
-		if i != -1 {
-			this.Url.RawQuery = raw[:i]
-		} else {
-			this.Url.RawQuery = raw
-		}
-		this.Url.Fragment = raw[i+1:]
+		var path string
+		this.Method, path, this.Proto = startLine[0], startLine[1], startLine[2]
+		this.Url, _ = ParseUrl(path)
 	}
 }
 

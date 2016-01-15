@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"time"
 )
 
@@ -31,28 +30,8 @@ var SUPPORT_BODY_HTTP_METHOD = map[string]bool{
 	"DELETE": true,
 }
 
-type Address struct {
-	Host string
-	Port string
-}
-
-func NewAddress(addr_str string) *Address {
-	addr := new(Address)
-	addr_strs := strings.Split(addr_str, ":")
-	if len(addr_strs) == 2 {
-		addr.Host, addr.Port = addr_strs[0], addr_strs[1]
-	} else {
-		addr.Host = addr_str
-	}
-	return addr
-}
-
-func (this *Address) String() string {
-	return this.Host + ":" + this.Port
-}
-
 type Server struct {
-	Addr             *Address
+	Addr             *Host
 	Routes           *Route
 	AllowHttpMethods []string
 }
@@ -63,14 +42,14 @@ var AppPath string
 var ViewPath string
 
 func Serve(addr string) {
-	DEFAULT_SERVER.Addr = NewAddress(addr)
+	DEFAULT_SERVER.Addr = ParseHost(addr)
 	ln, err := net.Listen("tcp", DEFAULT_SERVER.Addr.String())
 	if err != nil {
 		panic(err)
 	}
 	defer ln.Close()
 
-	log.Printf("<<<Server Accepting on Port %s>>>\n", DEFAULT_SERVER.Addr.Port)
+	log.Printf("<<<Server Accepting on Port %s>>>\n", DEFAULT_SERVER.Addr.Port())
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -114,7 +93,7 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	ctx := NewContext()
-	ctx.ReqAddr = NewAddress(conn.RemoteAddr().String())
+	ctx.ReqAddr = ParseHost(conn.RemoteAddr().String())
 	ctx.Req = NewRequest()
 	ctx.Resp = NewResponse()
 
@@ -145,7 +124,7 @@ func handleConnection(conn net.Conn) {
 	}
 
 	if ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR) != "" {
-		ctx.ReqAddr = NewAddress(ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR))
+		ctx.ReqAddr = ParseHost(ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR))
 	}
 	ctx.Resp.Proto = ctx.Req.Proto
 
@@ -199,7 +178,7 @@ func handleConnection(conn net.Conn) {
 		writer.Flush()
 	}
 	//	ctx.elapse = time.Now().Sub(serve_time)
-	log.Println(fmt.Sprintf(LOG_CONTEXT, ctx.ReqAddr.Host, "-", serve_time.Format(LOG_TIME_FORMAT), ctx.Req.Method, ctx.Req.Url.RawPath, ctx.Req.Proto, ctx.Resp.StatusCode, len(ctx.Req.Body), "-", ctx.Req.UserAgent, 0))
+	log.Println(fmt.Sprintf(LOG_CONTEXT, ctx.ReqAddr.Address(), "-", serve_time.Format(LOG_TIME_FORMAT), ctx.Req.Method, ctx.Req.Url.RawPath, ctx.Req.Proto, ctx.Resp.StatusCode, len(ctx.Req.Body), "-", ctx.Req.UserAgent, 0))
 }
 
 func Router(path string, method string, ctrl ControllerIfac, methodName string) {
