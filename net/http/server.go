@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"time"
+
+	cyurl "github.com/mnhkahn/cygo/net/url"
 )
 
 var ErrLog *log.Logger
@@ -31,7 +33,7 @@ var SUPPORT_BODY_HTTP_METHOD = map[string]bool{
 }
 
 type Server struct {
-	Addr             *Host
+	Addr             *cyurl.Host
 	Routes           *Route
 	AllowHttpMethods []string
 }
@@ -42,7 +44,7 @@ var AppPath string
 var ViewPath string
 
 func Serve(addr string) {
-	DEFAULT_SERVER.Addr = ParseHost(addr)
+	DEFAULT_SERVER.Addr = cyurl.ParseHost(addr)
 	ln, err := net.Listen("tcp", DEFAULT_SERVER.Addr.String())
 	if err != nil {
 		panic(err)
@@ -93,7 +95,7 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	ctx := NewContext()
-	ctx.ReqAddr = ParseHost(conn.RemoteAddr().String())
+	ctx.ReqAddr = cyurl.ParseHost(conn.RemoteAddr().String())
 	ctx.Req = NewRequest()
 	ctx.Resp = NewResponse()
 
@@ -124,7 +126,7 @@ func handleConnection(conn net.Conn) {
 	}
 
 	if ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR) != "" {
-		ctx.ReqAddr = ParseHost(ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR))
+		ctx.ReqAddr = cyurl.ParseHost(ctx.Req.Headers.Get(HTTP_HEAD_X_FORWARDED_FOR))
 	}
 	ctx.Resp.Proto = ctx.Req.Proto
 

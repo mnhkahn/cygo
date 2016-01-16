@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/base64"
 	"strings"
+
+	cyurl "github.com/mnhkahn/cygo/net/url"
 )
 
 type Request struct {
 	Method string
 
-	Url *URL
+	Url *cyurl.URL
 
 	Proto string
 
@@ -27,7 +29,7 @@ type Request struct {
 func NewRequest() *Request {
 	r := new(Request)
 	r.Headers = make(map[string][]string, 0)
-	r.Url = new(URL)
+	r.Url = new(cyurl.URL)
 	return r
 }
 
@@ -36,7 +38,7 @@ func (this *Request) ParseStartLine(line []byte) {
 	if len(startLine) == 3 {
 		var path string
 		this.Method, path, this.Proto = startLine[0], startLine[1], startLine[2]
-		this.Url, _ = ParseUrl(path)
+		this.Url, _ = cyurl.ParseUrl(path)
 	}
 }
 

@@ -1,9 +1,13 @@
 package http
 
+import (
+	cyurl "github.com/mnhkahn/cygo/net/url"
+)
+
 type Context struct {
 	Req     *Request
 	Resp    *Response
-	ReqAddr *Host
+	ReqAddr *cyurl.Host
 	//	elapse time.Duration
 }
 
