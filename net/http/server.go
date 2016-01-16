@@ -103,18 +103,19 @@ func handleConnection(conn net.Conn) {
 
 	reader := bufio.NewReader(conn)
 
+	// Read startline
+	line, _, err := reader.ReadLine()
+	if len(line) != 0 && err == nil {
+		ctx.Req.ParseStartLine(line)
+	}
+
 	// Read header
-	i := 0
-	for ; ; i++ {
+	for {
 		line, _, err := reader.ReadLine()
 		if len(line) == 0 || err != nil {
 			break
 		}
-		if i == 0 {
-			ctx.Req.ParseStartLine(line)
-		} else {
-			ctx.Req.ParseHeader(line)
-		}
+		ctx.Req.ParseHeader(line)
 	}
 
 	// Read body
