@@ -1,0 +1,15 @@
+AppName: gg
+MainApplication: [gg.go,config.go,build.go,deploy.go,pack.go,start.go,git.go,supervisor.go]
+FileWatcher: 
+IgnoreFileWather: gg
+
+Envs:
+RunFlag: 
+RunDirectory: ~/gg
+RunUser: bryce
+LogDirectory: ~/
+SupervisorConf: gg.conf
+PackPaths: 
+
+Git: false
+GitPullBranch: master
