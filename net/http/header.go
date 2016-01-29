@@ -25,7 +25,7 @@ const (
 	HTTP_HEAD_LOCATION         = "Location"
 	HTTP_HEAD_SERVER           = "Server"
 	HTTP_HEAD_CONTENTTYPE      = "Content-Type"
-	HTTP_HEAD_CONTENTLENGTH    = "Content-length"
+	HTTP_HEAD_CONTENTLENGTH    = "Content-Length"
 	HTTP_HEAD_DATE             = "Date"
 	HTTP_HEAD_ALLOW            = "Allow"
 	HTTP_HEAD_FORM             = "Form" // 用户的Email地址，如果是爬虫，最好有这个头

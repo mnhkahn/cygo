@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"encoding/base64"
+	"strconv"
 	"strings"
 
 	cyurl "github.com/mnhkahn/cygo/net/url"
@@ -20,6 +21,8 @@ type Request struct {
 	Host string
 
 	Headers Header
+
+	ContentLength int64
 
 	Body string
 
@@ -46,10 +49,13 @@ func (this *Request) ParseHeader(line []byte) {
 	l := string(line)
 	k, v := l[:strings.Index(l, ":")], l[strings.Index(l, ":")+1:]
 	k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+
 	if k == HTTP_HEAD_USERAGENT {
 		this.UserAgent = v
 	} else if k == HTTP_HEAD_HOST {
 		this.Host = v
+	} else if k == HTTP_HEAD_CONTENTLENGTH {
+		this.ContentLength, _ = strconv.ParseInt(v, 10, 64)
 	} else {
 		this.Headers[k] = append(this.Headers[k], v)
 	}

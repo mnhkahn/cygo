@@ -120,9 +120,12 @@ func handleConnection(conn net.Conn) {
 
 	// Read body
 	if _, exists := SUPPORT_BODY_HTTP_METHOD[ctx.Req.Method]; exists {
-		line, _, err := reader.ReadLine()
-		if len(line) != 0 && err == nil {
-			ctx.Req.Body = string(line)
+		body := make([]byte, ctx.Req.ContentLength)
+		_, err := reader.Read(body)
+		if err == nil {
+			ctx.Req.Body = string(body)
+		} else {
+			ctx.Req.Body = err.Error()
 		}
 	}
 
@@ -181,7 +184,7 @@ func handleConnection(conn net.Conn) {
 		writer.Flush()
 	}
 	//	ctx.elapse = time.Now().Sub(serve_time)
-	log.Println(fmt.Sprintf(LOG_CONTEXT, ctx.ReqAddr.Address(), "-", serve_time.Format(LOG_TIME_FORMAT), ctx.Req.Method, ctx.Req.Url.RawPath, ctx.Req.Proto, ctx.Resp.StatusCode, len(ctx.Req.Body), "-", ctx.Req.UserAgent, 0))
+	log.Println(fmt.Sprintf(LOG_CONTEXT, ctx.ReqAddr.Address(), "-", serve_time.Format(LOG_TIME_FORMAT), ctx.Req.Method, ctx.Req.Url.RawPath, ctx.Req.Proto, ctx.Resp.StatusCode, ctx.Req.ContentLength, "-", ctx.Req.UserAgent, 0))
 }
 
 func Router(path string, method string, ctrl ControllerIfac, methodName string) {
