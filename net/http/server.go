@@ -17,8 +17,8 @@ import (
 var ErrLog *log.Logger
 
 var HTTP_METHOD = map[string]string{
-	"GET": "GET",
-	//	"POST":    "POST",
+	"GET":  "GET",
+	"POST": "POST",
 	//	"HEAD":    "HEAD",
 	//	"PUT":     "PUT",
 	//	"TRACE":   "TRACE",
