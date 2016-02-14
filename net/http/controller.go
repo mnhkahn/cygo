@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"mime"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -63,7 +65,7 @@ func (this *Controller) ServeRaw(v []byte) {
 }
 
 func (this *Controller) ServeJson(j interface{}) {
-	this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, "text/plain; charset=utf-8")
+	this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, this.ContentType(filepath.Ext(params[0].(string))))
 	v, _ := json.Marshal(j)
 	this.Ctx.Resp.Body = string(v)
 }
@@ -74,7 +76,7 @@ func (this *Controller) ServeView(params ...interface{}) {
 	} else {
 		if templ, exists := ViewsTemplFiles[params[0].(string)]; exists {
 			if len(params) == 1 {
-				this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, "text/html; charset=utf-8")
+				this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, this.ContentType(filepath.Ext(params[0].(string))))
 				v, _ := ioutil.ReadFile(templ)
 				this.Ctx.Resp.Body = string(v)
 			} else if len(params) == 2 {
@@ -126,4 +128,12 @@ func (this *Controller) Favicon() {
 }
 
 func (this *Controller) Finish() {
+}
+
+// TypeByExtension returns the MIME type associated with the file extension ext. The extension ext should begin with a leading dot, as in ".html". When ext has no associated type, TypeByExtension returns "".
+func (this *Controller) ContentType(ext string) string {
+	if !strings.HasPrefix(ext, ".") {
+		return ""
+	}
+	return mime.TypeByExtension(ext)
 }
