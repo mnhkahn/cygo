@@ -109,7 +109,9 @@ func (this *Controller) ServeFile(params ...interface{}) {
 
 	} else if len(params) == 1 {
 		if templ, exists := ViewsTemplFiles[params[0].(string)]; exists {
-			this.Ctx.Resp.Body = string(templ)
+			this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, this.ContentType(filepath.Ext(params[0].(string))))
+			v, _ := ioutil.ReadFile(templ)
+			this.Ctx.Resp.Body = string(v)
 		} else {
 			ErrLog.Println("Can't find the template file", params)
 		}
