@@ -65,7 +65,7 @@ func (this *Controller) ServeRaw(v []byte) {
 }
 
 func (this *Controller) ServeJson(j interface{}) {
-	this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, this.ContentType(filepath.Ext(params[0].(string))))
+	this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, "text/plain; charset=utf-8")
 	v, _ := json.Marshal(j)
 	this.Ctx.Resp.Body = string(v)
 }
