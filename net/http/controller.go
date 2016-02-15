@@ -28,6 +28,10 @@ func (this *Controller) Init(ctx *Context) {
 	this.Ctx = ctx
 }
 
+func (this *Controller) Static() {
+	this.ServeFile(strings.TrimPrefix(this.Ctx.Req.Url.Path, StaticFolder+"/"))
+}
+
 func (this *Controller) BasicAuth(realm string) {
 	this.Ctx.Resp.StatusCode = StatusUnauthorized
 	this.Ctx.Resp.Headers.Add(HTTP_HEAD_WWW_AUTHENTICATE, fmt.Sprintf("Basic realm=%s", realm))

@@ -14,5 +14,5 @@ type Handle struct {
 
 func (this *Handle) ServeHTTP(ctx *Context) {
 	this.ctrl.Init(ctx)
-	this.fn.Call([]reflect.Value{})
+	this.fn.Call(nil)
 }

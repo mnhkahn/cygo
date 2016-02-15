@@ -42,6 +42,8 @@ var DEFAULT_SERVER *Server
 var ViewsTemplFiles map[string]string
 var AppPath string
 var ViewPath string
+var StaticFolder string = "/static"
+var StaticPath string
 
 func Serve(addr string) {
 	DEFAULT_SERVER.Addr = cyurl.ParseHost(addr)
@@ -62,6 +64,9 @@ func Serve(addr string) {
 }
 
 func init() {
+	DEFAULT_SERVER = new(Server)
+	DEFAULT_SERVER.Routes = NewRoute()
+
 	log.SetFlags(0)
 	log.Println(CYEAM_LOG)
 	errlogFile, logErr := os.OpenFile("error.log", os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
@@ -72,10 +77,9 @@ func init() {
 
 	ErrLog = log.New(errlogFile, "", log.LstdFlags|log.Llongfile)
 
-	DEFAULT_SERVER = new(Server)
-
 	AppPath, _ = filepath.Abs(filepath.Dir(os.Args[0]))
 	ViewPath = AppPath + "/views"
+	StaticPath = AppPath + StaticFolder
 	ViewsTemplFiles = make(map[string]string)
 
 	views, _ := ioutil.ReadDir(ViewPath)
@@ -83,7 +87,11 @@ func init() {
 		ViewsTemplFiles[view.Name()] = ViewPath + "/" + view.Name()
 	}
 
-	DEFAULT_SERVER.Routes = NewRoute()
+	views, _ = ioutil.ReadDir(StaticPath)
+	for _, view := range views {
+		ViewsTemplFiles[view.Name()] = StaticPath + "/" + view.Name()
+		Router(StaticFolder+"/"+view.Name(), "GET", &Controller{}, "Static")
+	}
 
 	Router("/", "OPTIONS", &Controller{}, "Option")
 	Router("/favicon.ico", "GET", &Controller{}, "Favicon")
