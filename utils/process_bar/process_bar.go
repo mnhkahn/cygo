@@ -27,21 +27,23 @@ func NewProcessBar(timer time.Duration) *ProcessBar {
 	return bar
 }
 
-func (this *ProcessBar) Start(f func() int) {
+func (this *ProcessBar) Start(f func() (int, string)) {
 	this.ticker = time.NewTicker(this.duration)
 	for !this.isComplete {
 		select {
 		case <-this.ticker.C:
-			this.process(f())
+			this.Process(f())
 		}
 	}
 }
 
-func (this *ProcessBar) process(processCnt int) {
+func (this *ProcessBar) Process(processCnt int, message string) {
 	if processCnt == DEFAULT_PROCESS_100 {
 		this.isComplete = true
-		this.ticker.Stop()
-		fmt.Println("100%", "[", strings.Repeat("=", DEFAULT_PROCESS_WIDTH), "]")
+		if this.ticker != nil {
+			this.ticker.Stop()
+		}
+		fmt.Println("100%", "[", strings.Repeat("=", DEFAULT_PROCESS_WIDTH), "]", message)
 		return
 	} else {
 		cnt := processCnt / this.percentDuration
@@ -53,7 +55,7 @@ func (this *ProcessBar) process(processCnt int) {
 		fmt.Print(PROCESS_BAR_GRAPH[processCnt%len(PROCESS_BAR_GRAPH)])
 
 		fmt.Print(strings.Repeat(" ", DEFAULT_PROCESS_WIDTH-cnt-1))
-		fmt.Print(" ]")
+		fmt.Print(" ]", message)
 
 		fmt.Print("\r")
 	}
@@ -83,6 +85,6 @@ func init() {
 	}()
 }
 
-func Start(f func() int) {
+func Start(f func() (int, string)) {
 	defaultProcessBar.Start(f)
 }

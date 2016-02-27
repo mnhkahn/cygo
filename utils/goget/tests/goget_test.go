@@ -14,10 +14,15 @@ func TestProcess(t *testing.T) {
 	job := schedule.NextJob()
 	fmt.Println(job)
 	schedule.FinishJob(job)
-
-	fmt.Println(schedule.Percent(), "percent")
+	fmt.Println(job.Percent(), "percent")
 
 	job = schedule.NextJob()
 	fmt.Println(job)
 	schedule.FinishJob(job)
+	fmt.Println(job.Percent(), "percent")
+
+	job = schedule.NextJob()
+	fmt.Println(job)
+	schedule.FinishJob(job)
+	fmt.Println(job.Percent(), "percent")
 }
