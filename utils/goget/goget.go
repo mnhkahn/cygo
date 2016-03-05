@@ -1,7 +1,8 @@
 package goget
 
 import (
-	"flag"
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -130,18 +131,25 @@ func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 	this.CompleteLength += (job.End - job.Start + 1)
 }
 
-var urlFlag = flag.String("u", "http://7b1h1l.com1.z0.glb.clouddn.com/bryce.jpg", "Fetch file url")
-var cntFlag = flag.Int("c", 1, "Fetch concurrently counts")
+func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	for i := job.Start; i < job.End; i++ {
+		this.processes[i] = STATUS_NO_START
+	}
+}
 
 func NewGoGet() *GoGet {
 	get := new(GoGet)
-	get.FilePath = "./"
+	if os.Getenv("HOME") != "" {
+		get.FilePath = os.Getenv("HOME") + "/Downloads/"
+	} else {
+		get.FilePath = "./"
+	}
+
 	get.GetClient = new(http.Client)
 	get.processBar = process_bar.NewProcessBar(0)
-
-	flag.Parse()
-	get.Url = *urlFlag
-	get.Cnt = *cntFlag
 
 	return get
 }
@@ -180,6 +188,7 @@ func (get *GoGet) Download(job *GoGetBlock) {
 		}
 	}()
 	if err != nil {
+		get.Schedule.ResetJob(job)
 		DebugLog.Printf("Download %s error %v.\n", range_i, err)
 	} else {
 		res, _ := ioutil.ReadAll(resp.Body)
@@ -192,31 +201,36 @@ func (get *GoGet) Download(job *GoGetBlock) {
 	<-get.jobStatus
 }
 
-func (get *GoGet) Start() {
+func (get *GoGet) Start(u string, cnt int) {
+	get.Url = u
+	get.Cnt = cnt
+
 	req, err := http.NewRequest("HEAD", get.Url, nil)
 	resp, err := get.GetClient.Do(req)
-	get.Header = resp.Header
+
 	if err != nil {
-		log.Panicf("Get %s error %v.\n", get.Url, err)
+		log.Printf("Get %s error %v.\n", get.Url, err)
+		return
 	}
+	get.Header = resp.Header
 	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(get.Header.Get("Content-Disposition"))
 	get.raw = make([]byte, resp.ContentLength, resp.ContentLength)
 	get.Schedule = NewGoGetSchedules(resp.ContentLength)
 
-	if strings.HasSuffix(get.FilePath, "/") {
+	if get.MediaParams["filename"] != "" {
 		get.FilePath += get.MediaParams["filename"]
+	} else if i := strings.LastIndex(get.Url, "/"); i != -1 && i+1 <= len(get.Url) {
+		get.FilePath += get.Url[i+1:]
 	} else {
+		hash := md5.New()
+		hash.Write([]byte(get.Url))
+		get.FilePath += base64.StdEncoding.EncodeToString(hash.Sum(nil))
 	}
 
-	if get.MediaParams["filename"] == "" {
-		i := strings.LastIndex(get.Url, "/")
-		if i != -1 && i+1 <= len(get.Url) {
-			get.FilePath += get.Url[i+1:]
-		}
-	}
 	get.File, err = os.Create(get.FilePath)
 	if err != nil {
-		log.Panicf("Create file %s error %v.\n", get.FilePath, err)
+		log.Printf("Create file %s error %v.\n", get.FilePath, err)
+		return
 	}
 	log.Printf("Get %s MediaType:%s, Filename:%s, Size %d.\n", get.Url, get.MediaType, get.MediaParams["filename"], get.Schedule.ContentLength)
 	if get.Header.Get("Accept-Ranges") != "" {
@@ -225,7 +239,7 @@ func (get *GoGet) Start() {
 		log.Printf("Server %s doesn't support Range.\n", get.Header.Get("Server"))
 	}
 
-	log.Printf("Start to download %s(%d bytes) with %d thread.\n", get.MediaParams["filename"], get.Schedule.ContentLength, get.Cnt)
+	log.Printf("Start to download %s(%d bytes) with %d thread.\n", get.FilePath, get.Schedule.ContentLength, get.Cnt)
 
 	get.jobs = make(chan *GoGetBlock, get.Cnt)
 	get.jobStatus = make(chan *GoGetBlock, get.Cnt)
