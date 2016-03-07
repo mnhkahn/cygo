@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mnhkahn/cygo/utils/process_bar"
+	"github.com/pyk/byten"
 )
 
 const (
@@ -25,6 +26,7 @@ const (
 type GoGet struct {
 	Url         string
 	Cnt         int
+	FailCnt     int // 连续失败次数
 	Schedule    *GoGetSchedules
 	Latch       int
 	Header      http.Header
@@ -221,6 +223,7 @@ func (get *GoGet) Download(job *GoGetBlock) {
 	}()
 
 	if err != nil || (resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK) {
+		get.FailCnt++
 		get.Schedule.ResetJob(job)
 		if resp == nil {
 			get.DebugLog.Printf("Download %s error %v.\n", range_i, err)
@@ -230,9 +233,11 @@ func (get *GoGet) Download(job *GoGetBlock) {
 	} else {
 		res, err := ioutil.ReadAll(resp.Body)
 		if err != nil || int64(len(res)) != job.End-job.Start+1 {
+			get.FailCnt++
 			get.Schedule.ResetJob(job)
 			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err, len(res))
 		} else {
+			get.FailCnt = 0
 			// Change to io.Copy
 			for i := 0; i < len(res); i++ {
 				get.raw[int64(i)+job.Start] = res[i]
@@ -282,19 +287,19 @@ func (get *GoGet) Start(u string, cnt int) {
 	}
 	// log.Printf("Get %s MediaType:%s, Filename:%s, Size %d.\n", get.Url, get.MediaType, get.MediaParams["filename"], get.Schedule.ContentLength)
 	if get.Header.Get("Accept-Ranges") != "" {
-		log.Printf("Server %s support Range by %s.\n", get.Header.Get("Server"), get.Header.Get("Accept-Ranges"))
+		// log.Printf("Server %s support Range by %s.\n", get.Header.Get("Server"), get.Header.Get("Accept-Ranges"))
 	} else {
 		log.Printf("Server %s doesn't support Range.\n", get.Header.Get("Server"))
 	}
 
-	log.Printf("Start to download %s(%d bytes) with %d thread.\n", get.FilePath, get.Schedule.ContentLength, get.Cnt)
+	log.Printf("Start to download %s(%s) with %d thread.\n", get.FilePath, byten.Size(get.Schedule.ContentLength), get.Cnt)
 
 	get.jobs = make(chan *GoGetBlock, get.Cnt)
 	get.jobStatus = make(chan *GoGetBlock, get.Cnt)
 	go get.producer()
 	go get.consumer()
 
-	for get.Schedule.Percent() != 1 {
+	for get.Schedule.Percent() != 1 && get.FailCnt < 3 {
 		get.processBar.Process(int(get.Schedule.Percent()*100), get.Schedule.Speed())
 		time.Sleep(1 * time.Second)
 	}
