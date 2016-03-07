@@ -82,7 +82,7 @@ func (this *GoGetSchedules) Percent() float32 {
 
 func (this *GoGetSchedules) Speed() string {
 	elaspe := time.Now().Sub(this.startTime).Seconds()
-	return fmt.Sprintf(" %d KB/S     ", this.CompleteLength/(int64(elaspe*1000)))
+	return fmt.Sprintf(" %s/S     ", byten.Size(this.CompleteLength/int64(elaspe)))
 }
 
 func (this *GoGetSchedules) NextJob() *GoGetBlock {
@@ -132,14 +132,14 @@ func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 	this.CompleteLength += (job.End - job.Start + 1)
 }
 
-func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
-	this.lock.Lock()
-	defer this.lock.Unlock()
+// func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
+// 	this.lock.Lock()
+// 	defer this.lock.Unlock()
 
-	for i := job.Start; i < job.End; i++ {
-		this.processes[i] = STATUS_NO_START
-	}
-}
+// 	for i := job.Start; i < job.End; i++ {
+// 		this.processes[i] = STATUS_NO_START
+// 	}
+// }
 
 func (this *GoGetSchedules) IsComplete() bool {
 	for _, process := range this.processes {
@@ -177,23 +177,24 @@ func NewGoGet() *GoGet {
 }
 
 func (get *GoGet) producer() {
-	downloadOnce := false
+	// downloadOnce := false
 	for {
 		job := get.Schedule.NextJob()
-		get.DebugLog.Println(job.Start, job.End)
+
 		if job.Start == -1 && get.Schedule.IsComplete() {
 			break
 		}
 		if job.Start != -1 && job.End != -1 {
 			get.jobs <- job
 		} else if job.Start == -1 && job.End == -1 {
-			downloadOnce = true
+			// downloadOnce = true
+			break
 		}
 
-		// 下载完成一次之后，1s钟检查一次
-		if downloadOnce {
-			time.Sleep(1 * time.Second)
-		}
+		// // 下载完成一次之后，1s钟检查一次
+		// if downloadOnce {
+		// 	time.Sleep(1 * time.Second)
+		// }
 	}
 }
 
@@ -208,7 +209,7 @@ func (get *GoGet) consumer() {
 }
 
 func (get *GoGet) Download(job *GoGetBlock) {
-	range_i := fmt.Sprintf("%d-%d", job.Start, job.End, get.Schedule.IsComplete())
+	range_i := fmt.Sprintf("%d-%d", job.Start, job.End)
 
 	get.DebugLog.Printf("Download block [%s].", range_i)
 
@@ -224,7 +225,8 @@ func (get *GoGet) Download(job *GoGetBlock) {
 
 	if err != nil || (resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK) {
 		get.FailCnt++
-		get.Schedule.ResetJob(job)
+		// get.Schedule.ResetJob(job)
+		go get.Download(job)
 		if resp == nil {
 			get.DebugLog.Printf("Download %s error %v.\n", range_i, err)
 		} else {
@@ -234,7 +236,8 @@ func (get *GoGet) Download(job *GoGetBlock) {
 		res, err := ioutil.ReadAll(resp.Body)
 		if err != nil || int64(len(res)) != job.End-job.Start+1 {
 			get.FailCnt++
-			get.Schedule.ResetJob(job)
+			go get.Download(job)
+			// get.Schedule.ResetJob(job)
 			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err, len(res))
 		} else {
 			get.FailCnt = 0
