@@ -9,6 +9,8 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -18,10 +20,6 @@ import (
 
 const (
 	DEFAULT_DOWNLOAD_BLOCK int64 = 1048576 // 2^20
-)
-
-var (
-	DebugLog *log.Logger
 )
 
 type GoGet struct {
@@ -40,6 +38,7 @@ type GoGet struct {
 	jobs        chan *GoGetBlock
 	jobStatus   chan *GoGetBlock
 	processBar  *process_bar.ProcessBar
+	DebugLog    *log.Logger
 }
 
 // 前开后闭区间？？？
@@ -140,13 +139,34 @@ func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
 	}
 }
 
+func (this *GoGetSchedules) IsComplete() bool {
+	for _, process := range this.processes {
+		if process != STATUS_FINISH {
+			return false
+		}
+	}
+
+	return true
+}
+
 func NewGoGet() *GoGet {
 	get := new(GoGet)
-	if os.Getenv("HOME") != "" {
+
+	if runtime.GOOS == "windows" {
+		// http://windowsitpro.com/systems-management/what-environment-variables-are-available-windows
+		get.FilePath = strings.Replace(os.Getenv("HOMEDRIVE")+os.Getenv("HOMEPATH"), "\\", "/", -1) + "/Downloads/"
+	} else if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
 		get.FilePath = os.Getenv("HOME") + "/Downloads/"
 	} else {
 		get.FilePath = "./"
 	}
+
+	debuglogFile, logErr := os.OpenFile(get.FilePath+"debug.log", os.O_CREATE|os.O_RDWR|os.O_TRUNC|os.O_APPEND, 0666)
+
+	if logErr != nil {
+		fmt.Println("Fail to find", "debug.log", " start Failed")
+	}
+	get.DebugLog = log.New(debuglogFile, "", log.LstdFlags)
 
 	get.GetClient = new(http.Client)
 	get.processBar = process_bar.NewProcessBar(0)
@@ -155,12 +175,23 @@ func NewGoGet() *GoGet {
 }
 
 func (get *GoGet) producer() {
+	downloadOnce := false
 	for {
 		job := get.Schedule.NextJob()
-		if job.Start == -1 {
+		get.DebugLog.Println(job.Start, job.End)
+		if job.Start == -1 && get.Schedule.IsComplete() {
 			break
 		}
-		get.jobs <- job
+		if job.Start != -1 && job.End != -1 {
+			get.jobs <- job
+		} else if job.Start == -1 && job.End == -1 {
+			downloadOnce = true
+		}
+
+		// 下载完成一次之后，1s钟检查一次
+		if downloadOnce {
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -175,27 +206,39 @@ func (get *GoGet) consumer() {
 }
 
 func (get *GoGet) Download(job *GoGetBlock) {
-	range_i := fmt.Sprintf("%d-%d", job.Start, job.End)
+	range_i := fmt.Sprintf("%d-%d", job.Start, job.End, get.Schedule.IsComplete())
 
-	DebugLog.Printf("Download block [%s].", range_i)
+	get.DebugLog.Printf("Download block [%s].", range_i)
 
 	req, err := http.NewRequest("GET", get.Url, nil)
 	req.Header.Set("Range", "bytes="+range_i)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36")
 	resp, err := get.GetClient.Do(req)
 	defer func() {
 		if resp != nil && resp.Body != nil {
 			resp.Body.Close()
 		}
 	}()
-	if err != nil {
+
+	if err != nil || (resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK) {
 		get.Schedule.ResetJob(job)
-		DebugLog.Printf("Download %s error %v.\n", range_i, err)
-	} else {
-		res, _ := ioutil.ReadAll(resp.Body)
-		for i := 0; i < len(res); i++ {
-			get.raw[int64(i)+job.Start] = res[i]
+		if resp == nil {
+			get.DebugLog.Printf("Download %s error %v.\n", range_i, err)
+		} else {
+			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err, resp.StatusCode)
 		}
-		get.Schedule.FinishJob(job)
+	} else {
+		res, err := ioutil.ReadAll(resp.Body)
+		if err != nil || int64(len(res)) != job.End-job.Start+1 {
+			get.Schedule.ResetJob(job)
+			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err, len(res))
+		} else {
+			// Change to io.Copy
+			for i := 0; i < len(res); i++ {
+				get.raw[int64(i)+job.Start] = res[i]
+			}
+			get.Schedule.FinishJob(job)
+		}
 	}
 
 	<-get.jobStatus
@@ -214,6 +257,11 @@ func (get *GoGet) Start(u string, cnt int) {
 	}
 	get.Header = resp.Header
 	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(get.Header.Get("Content-Disposition"))
+	if resp.ContentLength <= 0 {
+		log.Printf("ContentLength error", resp.ContentLength)
+		return
+	}
+
 	get.raw = make([]byte, resp.ContentLength, resp.ContentLength)
 	get.Schedule = NewGoGetSchedules(resp.ContentLength)
 
@@ -232,7 +280,7 @@ func (get *GoGet) Start(u string, cnt int) {
 		log.Printf("Create file %s error %v.\n", get.FilePath, err)
 		return
 	}
-	log.Printf("Get %s MediaType:%s, Filename:%s, Size %d.\n", get.Url, get.MediaType, get.MediaParams["filename"], get.Schedule.ContentLength)
+	// log.Printf("Get %s MediaType:%s, Filename:%s, Size %d.\n", get.Url, get.MediaType, get.MediaParams["filename"], get.Schedule.ContentLength)
 	if get.Header.Get("Accept-Ranges") != "" {
 		log.Printf("Server %s support Range by %s.\n", get.Header.Get("Server"), get.Header.Get("Accept-Ranges"))
 	} else {
@@ -257,6 +305,7 @@ func (get *GoGet) Start(u string, cnt int) {
 	get.File.Write(get.raw)
 	get.File.Close()
 	log.Printf("Download complete and store file %s.\n", get.FilePath)
+	get.DebugLog.Println("========================================")
 }
 
 func (get *GoGet) Stop() {
@@ -266,24 +315,19 @@ func (get *GoGet) Stop() {
 var DEFAULT_GET *GoGet
 
 func init() {
-	debuglogFile, logErr := os.OpenFile("debug.log", os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
-
-	if logErr != nil {
-		fmt.Println("Fail to find", "debug.log", " start Failed")
-	}
-	DebugLog = log.New(debuglogFile, "", log.LstdFlags)
-
 	DEFAULT_GET = NewGoGet()
-	// // handle ^c
-	// c := make(chan os.Signal, 1)
-	// signal.Notify(c, os.Interrupt)
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case <-c:
-	// 			b, _ := json.Marshal(DEFAULT_GET)
-	// 			io.Copy(DEFAULT_GET.File, bytes.NewReader(b))
-	// 		}
-	// 	}
-	// }()
+	// handle ^c
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for {
+			select {
+			case <-c:
+				// b, _ := json.Marshal(DEFAULT_GET)
+				// io.Copy(DEFAULT_GET.File, bytes.NewReader(b))
+				DEFAULT_GET.DebugLog.Println("========================================")
+				os.Exit(1)
+			}
+		}
+	}()
 }
