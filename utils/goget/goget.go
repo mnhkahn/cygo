@@ -7,13 +7,17 @@ import (
 	"io/ioutil"
 	"log"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/proxy"
 
 	"github.com/mnhkahn/cygo/utils/process_bar"
 	"github.com/pyk/byten"
@@ -252,11 +256,37 @@ func (get *GoGet) Download(job *GoGetBlock) {
 	<-get.jobStatus
 }
 
-func (get *GoGet) Start(u string, cnt int) {
-	get.Url = u
-	get.Cnt = cnt
+func (get *GoGet) Start(config *GoGetConfig) {
+	get.Url = config.Url
+	get.Cnt = config.Cnt
+
+	if config.ProxyType == PROXYHTTP {
+		proxy := func(_ *http.Request) (*url.URL, error) {
+			return url.Parse(config.Proxy)
+		}
+
+		get.GetClient.Transport = &http.Transport{Proxy: proxy}
+	} else if config.ProxyType == PROXYSOCKS5 {
+		dialer, err := proxy.SOCKS5("tcp", config.Proxy,
+			nil,
+			&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			},
+		)
+		if err != nil {
+			return
+		}
+
+		get.GetClient.Transport = &http.Transport{
+			Proxy:               nil,
+			Dial:                dialer.Dial,
+			TLSHandshakeTimeout: 10 * time.Second,
+		}
+	}
 
 	req, err := http.NewRequest("HEAD", get.Url, nil)
+
 	resp, err := get.GetClient.Do(req)
 
 	if err != nil {
@@ -318,6 +348,37 @@ func (get *GoGet) Start(u string, cnt int) {
 
 func (get *GoGet) Stop() {
 
+}
+
+const (
+	NOPROXY     = 0
+	PROXYHTTP   = 1
+	PROXYSOCKS5 = 2
+)
+
+var (
+	Proxys = map[string]int{"": NOPROXY, "http": PROXYHTTP, "socks5": PROXYSOCKS5}
+)
+
+type GoGetConfig struct {
+	Url       string
+	Cnt       int
+	ProxyType int // 0 no proxy; 1 http; 2 socks5
+	Proxy     string
+}
+
+func NewGoGetConfig() *GoGetConfig {
+	config := new(GoGetConfig)
+	return config
+}
+
+func NewGoGetConfig1(Url string, Cnt int, ProxyType string, Proxy string) *GoGetConfig {
+	config := NewGoGetConfig()
+	config.Url = Url
+	config.Cnt = Cnt
+	config.ProxyType = Proxys[ProxyType]
+	config.Proxy = Proxy
+	return config
 }
 
 var DEFAULT_GET *GoGet
