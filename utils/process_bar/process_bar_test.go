@@ -10,7 +10,7 @@ func TestMain(t *testing.T) {
 
 var a = 0
 
-func test() int {
+func test() (int, string) {
 	a += 1
-	return a
+	return a, "5 KB/S"
 }

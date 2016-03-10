@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"strings"
 	"time"
+
+	"github.com/buger/goterm"
 )
 
 type ProcessBar struct {
@@ -23,7 +25,7 @@ type ProcessBar struct {
 func NewProcessBar(timer time.Duration) *ProcessBar {
 	bar := new(ProcessBar)
 	bar.duration = timer
-	bar.percentDuration = 100 / DEFAULT_PROCESS_WIDTH
+	bar.percentDuration = 100 / goterm.Width()
 	return bar
 }
 
@@ -43,7 +45,7 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 		if this.ticker != nil {
 			this.ticker.Stop()
 		}
-		fmt.Println("100%", "[", strings.Repeat("=", DEFAULT_PROCESS_WIDTH), "]", message)
+		fmt.Println("100%", "[", strings.Repeat("=", goterm.Width()-len(message)-10), "]", message)
 		return
 	} else {
 		cnt := processCnt / this.percentDuration
@@ -54,7 +56,7 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 
 		fmt.Print(PROCESS_BAR_GRAPH[processCnt%len(PROCESS_BAR_GRAPH)])
 
-		fmt.Print(strings.Repeat(" ", DEFAULT_PROCESS_WIDTH-cnt-1))
+		fmt.Print(strings.Repeat(" ", goterm.Width()-len(message)-cnt-1-10))
 		fmt.Print(" ]", message)
 
 		fmt.Print("\r")
@@ -63,7 +65,7 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 
 var defaultProcessBar *ProcessBar
 
-const DEFAULT_PROCESS_WIDTH = 25
+// const DEFAULT_PROCESS_WIDTH = 25
 const DEFAULT_PROCESS_100 = 100
 
 var PROCESS_BAR_GRAPH = []string{" ", "-", "\\", "/"}
