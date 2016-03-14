@@ -17,15 +17,30 @@ import (
 
 type ProcessBar struct {
 	percentDuration int
+	percentWidth    int
 	duration        time.Duration
 	ticker          *time.Ticker
 	isComplete      bool
 }
 
+const (
+	DEFAULT_PROCESS_100 = 100
+	PERCENT_WIDTH       = 4
+	SPEED_WIDTH         = 7
+	BLANK_WIDTH         = 6 // " [  ] "
+)
+
 func NewProcessBar(timer time.Duration) *ProcessBar {
 	bar := new(ProcessBar)
 	bar.duration = timer
-	bar.percentDuration = 100 / goterm.Width()
+	bar.percentWidth = (goterm.Width() - PERCENT_WIDTH - SPEED_WIDTH - BLANK_WIDTH)
+	if bar.percentWidth > DEFAULT_PROCESS_100 {
+		bar.percentWidth = DEFAULT_PROCESS_100
+		bar.percentDuration = 1
+	} else {
+		bar.percentDuration = DEFAULT_PROCESS_100 / bar.percentWidth
+	}
+
 	return bar
 }
 
@@ -45,7 +60,7 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 		if this.ticker != nil {
 			this.ticker.Stop()
 		}
-		fmt.Println("100%", "[", strings.Repeat("=", goterm.Width()-len(message)-10), "]", message)
+		fmt.Println("100%", "[", strings.Repeat("=", this.percentWidth), "]", message)
 		return
 	} else {
 		cnt := processCnt / this.percentDuration
@@ -56,17 +71,15 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 
 		fmt.Print(PROCESS_BAR_GRAPH[processCnt%len(PROCESS_BAR_GRAPH)])
 
-		fmt.Print(strings.Repeat(" ", goterm.Width()-len(message)-cnt-1-10))
-		fmt.Print(" ]", message)
+		fmt.Print(strings.Repeat(" ", this.percentWidth-cnt-1))
+		// fmt.Print 不会自动追加空格
+		fmt.Print(" ] ", message)
 
 		fmt.Print("\r")
 	}
 }
 
 var defaultProcessBar *ProcessBar
-
-// const DEFAULT_PROCESS_WIDTH = 25
-const DEFAULT_PROCESS_100 = 100
 
 var PROCESS_BAR_GRAPH = []string{" ", "-", "\\", "/"}
 
