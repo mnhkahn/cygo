@@ -245,10 +245,12 @@ func (get *GoGet) Download(job *GoGetBlock) {
 			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err, len(res))
 		} else {
 			get.FailCnt = 0
-			// Change to io.Copy
-			for i := 0; i < len(res); i++ {
-				get.raw[int64(i)+job.Start] = res[i]
-			}
+
+			// http://stackoverflow.com/questions/7253152/how-to-copy-array-into-part-of-another-in-go
+			copy(get.raw[job.Start:job.End], res)
+			// for i := 0; i < len(res); i++ {
+			// 	get.raw[int64(i)+job.Start] = res[i]
+			// }
 			get.Schedule.FinishJob(job)
 		}
 	}
