@@ -7,8 +7,6 @@ package process_bar
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 	"time"
 
@@ -16,7 +14,7 @@ import (
 )
 
 type ProcessBar struct {
-	percentDuration int
+	percentDuration float32
 	percentWidth    int
 	duration        time.Duration
 	ticker          *time.Ticker
@@ -36,9 +34,9 @@ func NewProcessBar(timer time.Duration) *ProcessBar {
 	bar.percentWidth = (goterm.Width() - PERCENT_WIDTH - SPEED_WIDTH - BLANK_WIDTH)
 	if bar.percentWidth > DEFAULT_PROCESS_100 {
 		bar.percentWidth = DEFAULT_PROCESS_100
-		bar.percentDuration = 1
+		bar.percentDuration = 1.0
 	} else {
-		bar.percentDuration = DEFAULT_PROCESS_100 / bar.percentWidth
+		bar.percentDuration = float32(DEFAULT_PROCESS_100) / float32(bar.percentWidth)
 	}
 
 	return bar
@@ -63,7 +61,7 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 		fmt.Println("100%", "[", strings.Repeat("=", this.percentWidth), "]", message)
 		return
 	} else {
-		cnt := processCnt / this.percentDuration
+		cnt := int(float32(processCnt) / this.percentDuration)
 		fmt.Printf("%3d", processCnt)
 		fmt.Print("% [ ")
 
@@ -83,22 +81,22 @@ var defaultProcessBar *ProcessBar
 
 var PROCESS_BAR_GRAPH = []string{" ", "-", "\\", "/"}
 
-func init() {
-	defaultProcessBar = NewProcessBar(1 * time.Second)
+// func init() {
+// 	defaultProcessBar = NewProcessBar(1 * time.Second)
 
-	// handle ^c
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		for {
-			select {
-			case <-c:
-				fmt.Println()
-				os.Exit(1)
-			}
-		}
-	}()
-}
+// 	// handle ^c
+// 	c := make(chan os.Signal, 1)
+// 	signal.Notify(c, os.Interrupt)
+// 	go func() {
+// 		for {
+// 			select {
+// 			case <-c:
+// 				fmt.Println()
+// 				os.Exit(1)
+// 			}
+// 		}
+// 	}()
+// }
 
 func Start(f func() (int, string)) {
 	defaultProcessBar.Start(f)
