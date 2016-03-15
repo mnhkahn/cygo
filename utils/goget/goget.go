@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -86,7 +87,7 @@ func (this *GoGetSchedules) Percent() float32 {
 
 func (this *GoGetSchedules) Speed() string {
 	elaspe := time.Now().Sub(this.startTime).Seconds()
-	return fmt.Sprintf(" %s/S     ", byten.Size(this.CompleteLength/int64(elaspe)))
+	return fmt.Sprintf("%s/S     ", byten.Size(this.CompleteLength/int64(elaspe)))
 }
 
 func (this *GoGetSchedules) NextJob() *GoGetBlock {
@@ -259,6 +260,13 @@ func (get *GoGet) Download(job *GoGetBlock) {
 }
 
 func (get *GoGet) Start(config *GoGetConfig) {
+	defer func() {
+		if err := recover(); err != nil {
+			get.DebugLog.Println(err)
+			debug.PrintStack()
+		}
+	}()
+
 	get.Url = config.Url
 	get.Cnt = config.Cnt
 
