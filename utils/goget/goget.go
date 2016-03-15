@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	"github.com/mnhkahn/cygo/container/interval"
 	"github.com/mnhkahn/cygo/utils/process_bar"
 	"github.com/pyk/byten"
 )
@@ -50,8 +51,30 @@ type GoGet struct {
 
 // 前开后闭区间？？？
 type GoGetBlock struct {
-	Start int64
-	End   int64
+	start int64
+	end   int64
+}
+
+func NewGoGetBlock(s, e int64) *GoGetBlock {
+	n := new(GoGetBlock)
+	n.start, n.end = s, e
+	return n
+}
+
+func (this *GoGetBlock) Start() int64 {
+	return this.start
+}
+
+func (this *GoGetBlock) End() int64 {
+	return this.end
+}
+
+func (this *GoGetBlock) SetStart(start int64) {
+	this.start = start
+}
+
+func (this *GoGetBlock) SetEnd(end int64) {
+	this.end = end
 }
 
 const (
@@ -61,19 +84,26 @@ const (
 )
 
 type GoGetSchedules struct {
-	processes      []byte
-	DownloadBlock  int64
-	ContentLength  int64
-	CompleteLength int64
-	startTime      time.Time
-	lock           sync.RWMutex
+	// processes      []byte
+	noStartInterval *interval.Interval
+	startedInterval *interval.Interval
+	finishInterval  *interval.Interval
+	DownloadBlock   int64
+	ContentLength   int64
+	CompleteLength  int64
+	startTime       time.Time
+	lock            sync.RWMutex
 }
 
 func NewGoGetSchedules(contentLength int64) *GoGetSchedules {
 	schedules := new(GoGetSchedules)
 	schedules.DownloadBlock = DEFAULT_DOWNLOAD_BLOCK
 	schedules.ContentLength = contentLength
-	schedules.processes = make([]byte, schedules.ContentLength, schedules.ContentLength)
+	schedules.noStartInterval = interval.NewInterval()
+	schedules.noStartInterval.Add(NewGoGetBlock(0, schedules.ContentLength-1))
+	schedules.startedInterval = interval.NewInterval()
+	schedules.finishInterval = interval.NewInterval()
+	// schedules.processes = make([]byte, schedules.ContentLength, schedules.ContentLength)
 	return schedules
 }
 
@@ -102,39 +132,53 @@ func (this *GoGetSchedules) NextJob() *GoGetBlock {
 
 	var i int64
 	for i = 0; i < this.ContentLength; i++ {
-		if this.processes[i] == STATUS_NO_START {
-			job.Start = i
+		// if this.processes[i] == STATUS_NO_START {
+		if this.noStartInterval.In(i) {
+			job.SetStart(i)
 			break
 		}
 	}
 
 	if i >= this.ContentLength {
-		job.Start = -1
-		job.End = -1
+		job.SetStart(-1)
+		job.SetEnd(-1)
 		return job
 	}
 
-	job.End = job.Start + this.DownloadBlock
-	for i = job.Start; i-job.Start < this.DownloadBlock && i < this.ContentLength; i++ {
-		if this.processes[i] == STATUS_FINISH {
-			job.End = i - 1
+	job.SetEnd(job.Start() + this.DownloadBlock)
+	for i = job.Start(); i-job.Start() < this.DownloadBlock && i < this.ContentLength; i++ {
+		// if this.processes[i] == STATUS_FINISH {
+		if this.finishInterval.In(i) {
+			job.SetEnd(i - 1)
 			break
 		}
-		job.End = i
-		this.processes[i] = STATUS_START
+		job.SetEnd(i)
+		// this.processes[i] = STATUS_START
 	}
+	this.StartJob(job)
 
 	return job
+}
+
+func (this *GoGetSchedules) StartJob(job *GoGetBlock) {
+	// this.lock.Lock()
+	// defer this.lock.Unlock()
+
+	// this.noStartInterval.DebugPrint()
+	this.noStartInterval.Sub(job)
+	this.startedInterval.Add(job)
 }
 
 func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	for i := job.Start; i < job.End; i++ {
-		this.processes[i] = STATUS_FINISH
-	}
-	this.CompleteLength += (job.End - job.Start + 1)
+	// for i := job.Start(); i < job.End(); i++ {
+	// 	this.processes[i] = STATUS_FINISH
+	// }
+	this.startedInterval.Sub(job)
+	this.finishInterval.Add(job)
+	this.CompleteLength += (job.End() - job.Start() + 1)
 }
 
 // func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
@@ -147,13 +191,16 @@ func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 // }
 
 func (this *GoGetSchedules) IsComplete() bool {
-	for _, process := range this.processes {
-		if process != STATUS_FINISH {
-			return false
-		}
+	// for _, process := range this.processes {
+	// 	if process != STATUS_FINISH {
+	// 		return false
+	// 	}
+	// }
+	if this.noStartInterval.Empty() && this.startedInterval.Empty() && this.finishInterval.Len() == 1 && this.finishInterval.Get()[0].Start() == 0 && this.finishInterval.Get()[0].End() == this.CompleteLength-1 {
+		return true
 	}
 
-	return true
+	return false
 }
 
 func NewGoGet() *GoGet {
@@ -185,13 +232,19 @@ func (get *GoGet) producer() {
 	// downloadOnce := false
 	for {
 		job := get.Schedule.NextJob()
+		// get.Schedule.noStartInterval.DebugPrint()
+		// log.Println("1111111111111111111111")
+		// get.Schedule.startedInterval.DebugPrint()
+		// log.Println("222222222222222222222222222")
+		// get.Schedule.finishInterval.DebugPrint()
+		// log.Println("333333333333333333333333")
 
-		if job.Start == -1 && get.Schedule.IsComplete() {
+		if job.Start() == -1 && get.Schedule.IsComplete() {
 			break
 		}
-		if job.Start != -1 && job.End != -1 {
+		if job.Start() != -1 && job.End() != -1 {
 			get.jobs <- job
-		} else if job.Start == -1 && job.End == -1 {
+		} else if job.Start() == -1 && job.End() == -1 {
 			// downloadOnce = true
 			break
 		}
@@ -239,7 +292,7 @@ func (get *GoGet) Download(job *GoGetBlock) {
 		}
 	} else {
 		res, err := ioutil.ReadAll(resp.Body)
-		if err != nil || int64(len(res)) != job.End-job.Start+1 {
+		if err != nil || int64(len(res)) != job.End()-job.Start()+1 {
 			get.FailCnt++
 			go get.Download(job)
 			// get.Schedule.ResetJob(job)
@@ -248,7 +301,7 @@ func (get *GoGet) Download(job *GoGetBlock) {
 			get.FailCnt = 0
 
 			// http://stackoverflow.com/questions/7253152/how-to-copy-array-into-part-of-another-in-go
-			copy(get.raw[job.Start:job.End], res)
+			copy(get.raw[job.Start():job.End()], res)
 			// for i := 0; i < len(res); i++ {
 			// 	get.raw[int64(i)+job.Start] = res[i]
 			// }
@@ -357,7 +410,8 @@ func (get *GoGet) Start(config *GoGetConfig) {
 }
 
 func (get *GoGet) Stop() {
-
+	// b, _ := json.Marshal(DEFAULT_GET)
+	// io.Copy(DEFAULT_GET.File, bytes.NewReader(b))
 }
 
 const (
@@ -402,8 +456,7 @@ func init() {
 		for {
 			select {
 			case <-c:
-				// b, _ := json.Marshal(DEFAULT_GET)
-				// io.Copy(DEFAULT_GET.File, bytes.NewReader(b))
+				DEFAULT_GET.Stop()
 				DEFAULT_GET.DebugLog.Println("========================================")
 				os.Exit(1)
 			}
