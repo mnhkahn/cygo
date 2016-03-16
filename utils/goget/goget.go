@@ -105,11 +105,6 @@ func NewGoGetSchedules(contentLength int64) *GoGetSchedules {
 	schedules.startedInterval = interval.NewInterval()
 	schedules.finishInterval = interval.NewInterval()
 	schedules.processes = make([]byte, schedules.ContentLength, schedules.ContentLength)
-
-	log.Println("*********************1")
-	schedules.finishInterval.DebugPrint()
-	log.Println("&&&&&&&&&&&&&&&&&&&&&1")
-
 	return schedules
 }
 
@@ -174,7 +169,7 @@ func (this *GoGetSchedules) StartJob(job *GoGetBlock) {
 	this.noStartInterval.Sub(job)
 	this.startedInterval.Add(NewGoGetBlock(job.Start(), job.End()))
 	// log.Println("---------------------", job.Start(), job.End())
-	// this.startedInterval.DebugPrint()
+	// this.noStartInterval.DebugPrint()
 }
 
 func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
@@ -185,17 +180,17 @@ func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 		this.processes[i] = STATUS_FINISH
 	}
 
-	log.Println("111111111111111111-", job.Start(), job.End())
-	this.startedInterval.DebugPrint()
+	this.CompleteLength += (job.End() - job.Start() + 1)
+
+	// log.Println("111111111111111111", job.Start(), job.End())
+	// this.startedInterval.DebugPrint()
 	this.startedInterval.Sub(job)
-	log.Println("---------------------", job.Start(), job.End())
-	this.startedInterval.DebugPrint()
+	// log.Println("---------------------", job.Start(), job.End())
+	// this.startedInterval.DebugPrint()
 
 	this.finishInterval.Add(NewGoGetBlock(job.Start(), job.End()))
 	// this.finishInterval.DebugPrint()
 	// log.Println("---------------------", job.Start(), job.End())
-
-	this.CompleteLength += (job.End() - job.Start() + 1)
 }
 
 // func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
@@ -250,12 +245,6 @@ func (get *GoGet) producer() {
 	// downloadOnce := false
 	for {
 		job := get.Schedule.NextJob()
-		// get.Schedule.noStartInterval.DebugPrint()
-		// log.Println("1111111111111111111111")
-		// get.Schedule.startedInterval.DebugPrint()
-		// log.Println("222222222222222222222222222")
-		// get.Schedule.finishInterval.DebugPrint()
-		// log.Println("333333333333333333333333")
 
 		if job.Start() == -1 && get.Schedule.IsComplete() {
 			break
@@ -416,13 +405,16 @@ func (get *GoGet) Start(config *GoGetConfig) {
 	go get.producer()
 	go get.consumer()
 
-	for get.Schedule.Percent() != 1 && get.FailCnt < 3 {
-		// get.processBar.Process(int(get.Schedule.Percent()*100), get.Schedule.Speed())
+	for get.Schedule.Percent() < 1 && get.FailCnt < 3 {
+		get.processBar.Process(int(get.Schedule.Percent()*100), get.Schedule.Speed())
+		// fmt.Println(get.Schedule.noStartInterval.Len(), get.Schedule.startedInterval.Len(), get.Schedule.finishInterval.Len())
 		time.Sleep(1 * time.Second)
 	}
-	// if get.Schedule.Percent() == 1 {
-	// 	get.processBar.Process(100, get.Schedule.Speed())
-	// }
+	if get.Schedule.Percent() == 1 {
+		get.processBar.Process(100, get.Schedule.Speed())
+	} else {
+		log.Println("Download error.")
+	}
 
 	get.File.Write(get.raw)
 	get.File.Close()

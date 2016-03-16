@@ -5,22 +5,17 @@ import "testing"
 func TestInterval(t *testing.T) {
 	interval := NewInterval()
 
-	// interval.Add(New(0, 1))
+	// interval.Add(New(307200, 511999))
 	// interval.DebugPrint()
-	// println("exists", interval.Exists(New(2, 2)))
 
-	// interval.Add(New(1, 2))
+	// interval.Sub(New(409600, 511999))
 	// interval.DebugPrint()
-	// println("exists", interval.Exists(New(2, 2)))
 
-	interval.Add(New(307200, 921599))
-	interval.Add(New(1024000, 2662399))
+	interval.Add(New(0, 1397587))
 	interval.DebugPrint()
 
-	// interval.Sub(New(2, 3))
-	interval.Sub(New(307200, 409599))
+	interval.Sub(New(0, 102399))
 	interval.DebugPrint()
-	// println("exists", interval.Exists(New(2, 2)))
 }
 
 type TestIntervalStr struct {

@@ -23,7 +23,7 @@ func (this *Interval) DebugPrint() {
 	for _, interval := range this.intervals {
 		fmt.Printf("[%d~%d] ", interval.Start(), interval.End())
 	}
-	fmt.Println()
+	fmt.Println("interval/debug")
 }
 
 func (this *Interval) Len() int {
@@ -67,10 +67,14 @@ func (this *Interval) Add(intervalB IntervalBlockIface) {
 			this.intervals[i] = intervalB
 			return
 		} else if interval.End() == intervalB.Start() || interval.End()+1 == intervalB.Start() { // merge a b
+			this.Sub(interval)
 			interval.SetEnd(intervalB.End())
+			this.Add(interval)
 			return
 		} else if interval.Start() == intervalB.End() || interval.Start() == intervalB.End()+1 { // merge b a
+			this.Sub(interval)
 			interval.SetStart(intervalB.Start())
+			this.Add(interval)
 			return
 		} else if intervalB.Start() < interval.Start() { // insert
 			insertIndex = i
@@ -118,9 +122,9 @@ func Equal(a, b IntervalBlockIface) bool {
 
 // a - b 的绝对值
 func Sub(a, b IntervalBlockIface) IntervalBlockIface {
-	if a.Start() <= b.Start() { // 减前面
+	if a.Start() == b.Start() && a.End() > b.End() { // 减前面
 		a.SetStart(b.End() + 1)
-	} else if a.End() >= b.End() { // 减后面
+	} else if a.End() == b.End() && a.Start() < b.Start() { // 减后面
 		a.SetEnd(b.Start() - 1)
 	}
 	return a

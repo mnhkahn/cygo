@@ -53,6 +53,9 @@ func (this *ProcessBar) Start(f func() (int, string)) {
 }
 
 func (this *ProcessBar) Process(processCnt int, message string) {
+	if processCnt > DEFAULT_PROCESS_100 {
+		processCnt = DEFAULT_PROCESS_100
+	}
 	if processCnt == DEFAULT_PROCESS_100 {
 		this.isComplete = true
 		if this.ticker != nil {
