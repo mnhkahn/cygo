@@ -21,8 +21,9 @@ func NewInterval() *Interval {
 
 func (this *Interval) DebugPrint() {
 	for _, interval := range this.intervals {
-		fmt.Println(interval.Start(), interval.End())
+		fmt.Printf("[%d~%d] ", interval.Start(), interval.End())
 	}
+	fmt.Println()
 }
 
 func (this *Interval) Len() int {
@@ -65,10 +66,10 @@ func (this *Interval) Add(intervalB IntervalBlockIface) {
 		} else if Include(intervalB, interval) { // b包含a
 			this.intervals[i] = intervalB
 			return
-		} else if interval.End() == intervalB.Start() { // merge a b
+		} else if interval.End() == intervalB.Start() || interval.End()+1 == intervalB.Start() { // merge a b
 			interval.SetEnd(intervalB.End())
 			return
-		} else if interval.Start() == intervalB.End() { // merge b a
+		} else if interval.Start() == intervalB.End() || interval.Start() == intervalB.End()+1 { // merge b a
 			interval.SetStart(intervalB.Start())
 			return
 		} else if intervalB.Start() < interval.Start() { // insert
@@ -86,6 +87,7 @@ func (this *Interval) Sub(intervalB IntervalBlockIface) {
 	for i, interval := range this.intervals {
 		// b include a
 		if Include(intervalB, interval) {
+			// println(i, "AAAAAAAAAAAAAAAAAAAAA")
 			this.intervals = append(this.intervals[:i], this.intervals[i+1:]...)
 		} else {
 			Sub(interval, intervalB)
