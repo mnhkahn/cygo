@@ -85,10 +85,17 @@ func (this *Interval) Add(intervalB IntervalBlockIface) {
 
 func (this *Interval) Sub(intervalB IntervalBlockIface) {
 	for i, interval := range this.intervals {
-		// b include a
-		if Include(intervalB, interval) {
-			// println(i, "AAAAAAAAAAAAAAAAAAAAA")
+		if !Include(interval, intervalB) && !Include(intervalB, interval) { // 没有交集
+			continue
+		} else if Include(intervalB, interval) { // b include a
 			this.intervals = append(this.intervals[:i], this.intervals[i+1:]...)
+		} else if interval.Start() < intervalB.Start() && interval.End() > intervalB.End() { // 减中间
+			temAEnd := interval.End()
+
+			interval.SetEnd(intervalB.Start() - 1)
+			intervalB.SetStart(intervalB.End() + 1)
+			intervalB.SetEnd(temAEnd)
+			this.Add(intervalB)
 		} else {
 			Sub(interval, intervalB)
 		}

@@ -13,13 +13,14 @@ func TestInterval(t *testing.T) {
 	// interval.DebugPrint()
 	// println("exists", interval.Exists(New(2, 2)))
 
-	interval.Add(New(0, 96369871))
+	interval.Add(New(307200, 921599))
+	interval.Add(New(1024000, 2662399))
 	interval.DebugPrint()
 
 	// interval.Sub(New(2, 3))
-	interval.Sub(New(0, 1048575))
+	interval.Sub(New(307200, 409599))
 	interval.DebugPrint()
-	println("exists", interval.Exists(New(2, 2)))
+	// println("exists", interval.Exists(New(2, 2)))
 }
 
 type TestIntervalStr struct {

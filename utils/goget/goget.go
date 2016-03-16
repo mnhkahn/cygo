@@ -27,6 +27,7 @@ import (
 
 const (
 	DEFAULT_DOWNLOAD_BLOCK int64 = 102400 // 100KB
+	// DEFAULT_DOWNLOAD_BLOCK int64 = 1048576 // 2^20
 )
 
 type GoGet struct {
@@ -152,8 +153,8 @@ func (this *GoGetSchedules) NextJob() *GoGetBlock {
 
 	job.SetEnd(job.Start() + this.DownloadBlock)
 	for i = job.Start(); i-job.Start() < this.DownloadBlock && i < this.ContentLength; i++ {
-		if this.processes[i] == STATUS_FINISH {
-			// if this.finishInterval.In(i) {
+		// if this.processes[i] == STATUS_FINISH {
+		if this.finishInterval.In(i) {
 			job.SetEnd(i - 1)
 			break
 		}
@@ -172,8 +173,8 @@ func (this *GoGetSchedules) StartJob(job *GoGetBlock) {
 
 	this.noStartInterval.Sub(job)
 	this.startedInterval.Add(NewGoGetBlock(job.Start(), job.End()))
-	// this.startedInterval.DebugPrint()
 	// log.Println("---------------------", job.Start(), job.End())
+	// this.startedInterval.DebugPrint()
 }
 
 func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
@@ -184,7 +185,12 @@ func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 		this.processes[i] = STATUS_FINISH
 	}
 
+	log.Println("111111111111111111-", job.Start(), job.End())
+	this.startedInterval.DebugPrint()
 	this.startedInterval.Sub(job)
+	log.Println("---------------------", job.Start(), job.End())
+	this.startedInterval.DebugPrint()
+
 	this.finishInterval.Add(NewGoGetBlock(job.Start(), job.End()))
 	// this.finishInterval.DebugPrint()
 	// log.Println("---------------------", job.Start(), job.End())
