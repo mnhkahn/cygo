@@ -2,12 +2,22 @@ package strings
 
 import (
 	gostr "strings"
+	"unicode"
 	"unicode/utf8"
 )
 
 const (
 	DEFAULT_SEP = ","
 )
+
+func TrimAllSpace(str string) string {
+	return gostr.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, str)
+}
 
 func SplitEachAfter(s, sep string, f func(string)) {
 	if sep == "" {
