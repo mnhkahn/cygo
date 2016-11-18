@@ -1,6 +1,7 @@
 package url
 
 import (
+	"net/url"
 	"strings"
 
 	cystr "github.com/mnhkahn/cygo/strings"
@@ -100,6 +101,7 @@ func (this *URL) Query() Values {
 			if i+1 <= len(q) {
 				v = q[i+1:]
 			}
+			v, _ = url.QueryUnescape(v)
 			m.Add(k, v)
 		}
 	}
