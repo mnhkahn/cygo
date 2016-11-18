@@ -53,7 +53,7 @@ func Serve(addr string) {
 	}
 	defer ln.Close()
 
-	log.Printf("<<<Server Accepting on Port %s>>>\n", DEFAULT_SERVER.Addr.Port())
+	log.Printf("<<<Server Accepting on %s>>>\n", DEFAULT_SERVER.Addr.String())
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

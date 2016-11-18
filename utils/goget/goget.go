@@ -25,7 +25,8 @@ import (
 )
 
 const (
-	DEFAULT_DOWNLOAD_BLOCK int64 = 1048576 // 2^20
+	DEFAULT_DOWNLOAD_BLOCK int64 = 1024 * 16 // 2^20
+	// DEFAULT_DOWNLOAD_BLOCK int64 = 1048576 // 2^20
 )
 
 type GoGet struct {
@@ -87,7 +88,11 @@ func (this *GoGetSchedules) Percent() float32 {
 
 func (this *GoGetSchedules) Speed() string {
 	elaspe := time.Now().Sub(this.startTime).Seconds()
-	return fmt.Sprintf("%s/S     ", byten.Size(this.CompleteLength/int64(elaspe)))
+	speed := "0"
+	if elaspe > 0 {
+		speed = byten.Size(int64(float64(this.CompleteLength) / elaspe))
+	}
+	return fmt.Sprintf("%s/S     ", speed)
 }
 
 func (this *GoGetSchedules) NextJob() *GoGetBlock {
@@ -171,11 +176,21 @@ func NewGoGet() *GoGet {
 	debuglogFile, logErr := os.OpenFile(get.FilePath+"debug.log", os.O_CREATE|os.O_RDWR|os.O_TRUNC|os.O_APPEND, 0666)
 
 	if logErr != nil {
-		fmt.Println("Fail to find", "debug.log", " start Failed")
+		fmt.Println("Fail to find", get.FilePath+"debug.log", " start Failed")
 	}
-	get.DebugLog = log.New(debuglogFile, "", log.LstdFlags)
 
+	os.Stderr = debuglogFile
+	get.DebugLog = log.New(debuglogFile, "", log.Lshortfile)
+
+	// http 长连接 https://serholiu.com/go-http-client-keepalive
+	// cache dns
+	ips, err := net.LookupIP("issuecdn.baidupcs.com")
+	fmt.Println(ips, err, "AAAAAAAAAAAAa")
 	get.GetClient = new(http.Client)
+	get.GetClient.Transport = &http.Transport{
+		Dial: PrintLocalDial,
+	}
+
 	get.processBar = process_bar.NewProcessBar(0)
 
 	return get
@@ -333,24 +348,35 @@ func (get *GoGet) Start(config *GoGetConfig) {
 		log.Printf("Server %s doesn't support Range.\n", get.Header.Get("Server"))
 	}
 
-	log.Printf("Start to download %s(%s) with %d thread.\n", get.FilePath, byten.Size(get.Schedule.ContentLength), get.Cnt)
+	log.Printf("Start to download %s(%d %s) with %d thread.\n", get.FilePath, resp.ContentLength, byten.Size(get.Schedule.ContentLength), get.Cnt)
 
 	get.jobs = make(chan *GoGetBlock, get.Cnt)
 	get.jobStatus = make(chan *GoGetBlock, get.Cnt)
 	go get.producer()
 	go get.consumer()
 
-	for get.Schedule.Percent() != 1 && get.FailCnt < 3 {
+	for get.Schedule.Percent() != 1 && get.FailCnt < 300 {
 		get.processBar.Process(int(get.Schedule.Percent()*100), get.Schedule.Speed())
+		// fmt.Println(get.Schedule.CompleteLength, get.Schedule.ContentLength, get.Schedule.Percent())
 		time.Sleep(1 * time.Second)
 	}
 	if get.Schedule.Percent() == 1 {
+		// fmt.Println(get.Schedule.CompleteLength, get.Schedule.ContentLength, get.Schedule.Percent())
 		get.processBar.Process(100, get.Schedule.Speed())
 	}
 
-	get.File.Write(get.raw)
+	_, err = get.File.Write(get.raw)
+	if err != nil {
+		panic(err)
+	}
 	get.File.Close()
-	log.Printf("Download complete and store file %s.\n", get.FilePath)
+
+	h := md5.New()
+	_, err = h.Write(get.raw)
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Download complete and store file %s. MD5: %x.\n", get.FilePath, h.Sum(nil))
 	get.DebugLog.Println("========================================")
 }
 
