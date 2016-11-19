@@ -13,7 +13,7 @@ import (
 )
 
 // 定义默认大小的chunk
-const chunkSize int = 3
+const chunkSize int = 32
 
 // const chunkSize int = 1024
 

@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/debug"
+	// "strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,9 @@ const (
 )
 
 type GoGet struct {
-	Url         string
+	Url string
+	// u           *url.URL
+	// Ips         []net.IP
 	Cnt         int
 	FailCnt     int // 连续失败次数
 	Schedule    *GoGetSchedules
@@ -95,6 +98,7 @@ func (this *GoGetSchedules) Speed() string {
 	return fmt.Sprintf("%s/S     ", speed)
 }
 
+// get next download block size
 func (this *GoGetSchedules) NextJob() *GoGetBlock {
 	this.lock.Lock()
 	defer this.lock.Unlock()
@@ -174,21 +178,17 @@ func NewGoGet() *GoGet {
 	}
 
 	debuglogFile, logErr := os.OpenFile(get.FilePath+"debug.log", os.O_CREATE|os.O_RDWR|os.O_TRUNC|os.O_APPEND, 0666)
-
 	if logErr != nil {
-		fmt.Println("Fail to find", get.FilePath+"debug.log", " start Failed")
+		log.Println(logErr)
 	}
 
 	os.Stderr = debuglogFile
 	get.DebugLog = log.New(debuglogFile, "", log.Lshortfile)
 
 	// http 长连接 https://serholiu.com/go-http-client-keepalive
-	// cache dns
-	ips, err := net.LookupIP("issuecdn.baidupcs.com")
-	fmt.Println(ips, err, "AAAAAAAAAAAAa")
 	get.GetClient = new(http.Client)
 	get.GetClient.Transport = &http.Transport{
-		Dial: PrintLocalDial,
+		Dial: KeepAliveDialTimeout,
 	}
 
 	get.processBar = process_bar.NewProcessBar(0)
@@ -229,6 +229,13 @@ func (get *GoGet) consumer() {
 }
 
 func (get *GoGet) Download(job *GoGetBlock) {
+	defer func() {
+		if err := recover(); err != nil {
+			get.DebugLog.Println(err)
+			debug.PrintStack()
+		}
+	}()
+
 	range_i := fmt.Sprintf("%d-%d", job.Start, job.End)
 
 	get.DebugLog.Printf("Download block [%s].", range_i)
@@ -258,7 +265,7 @@ func (get *GoGet) Download(job *GoGetBlock) {
 			get.FailCnt++
 			go get.Download(job)
 			// get.Schedule.ResetJob(job)
-			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err, len(res))
+			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err)
 		} else {
 			get.FailCnt = 0
 			// Change to io.Copy
@@ -280,8 +287,18 @@ func (get *GoGet) Start(config *GoGetConfig) {
 		}
 	}()
 
+	var err error
+
 	get.Url = config.Url
 	get.Cnt = config.Cnt
+
+	// // cache dns
+	// get.u, err = url.Parse(get.Url)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// get.Ips, err = net.LookupIP(get.u.Host)
+	// fmt.Println(get.Ips, err, "AAAAAAAAAAAAa")
 
 	if config.ProxyType == PROXYHTTP {
 		proxy := func(_ *http.Request) (*url.URL, error) {
@@ -308,32 +325,14 @@ func (get *GoGet) Start(config *GoGetConfig) {
 		}
 	}
 
-	req, err := http.NewRequest("HEAD", get.Url, nil)
-
-	resp, err := get.GetClient.Do(req)
-
-	if err != nil {
-		log.Printf("Get %s error %v.\n", get.Url, err)
-		return
-	}
-	get.Header = resp.Header
-	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(get.Header.Get("Content-Disposition"))
-	if resp.ContentLength <= 0 {
-		log.Printf("ContentLength error", resp.ContentLength)
-		return
-	}
-
-	get.raw = make([]byte, resp.ContentLength, resp.ContentLength)
-	get.Schedule = NewGoGetSchedules(resp.ContentLength)
-
-	if get.MediaParams["filename"] != "" {
-		get.FilePath += get.MediaParams["filename"]
-	} else if i := strings.LastIndex(get.Url, "/"); i != -1 && i+1 <= len(get.Url) {
-		get.FilePath += get.Url[i+1:]
-	} else {
-		hash := md5.New()
-		hash.Write([]byte(get.Url))
-		get.FilePath += base64.StdEncoding.EncodeToString(hash.Sum(nil))
+	// var err error
+	for i := 0; i < 5; i++ {
+		err := get.InitLen()
+		if err == nil {
+			break
+		} else {
+			get.DebugLog.Println("Retry", i)
+		}
 	}
 
 	get.File, err = os.Create(get.FilePath)
@@ -348,16 +347,17 @@ func (get *GoGet) Start(config *GoGetConfig) {
 		log.Printf("Server %s doesn't support Range.\n", get.Header.Get("Server"))
 	}
 
-	log.Printf("Start to download %s(%d %s) with %d thread.\n", get.FilePath, resp.ContentLength, byten.Size(get.Schedule.ContentLength), get.Cnt)
+	log.Printf("Start to download %s(%s) with %d thread.\n", get.FilePath, byten.Size(get.Schedule.ContentLength), get.Cnt)
 
 	get.jobs = make(chan *GoGetBlock, get.Cnt)
 	get.jobStatus = make(chan *GoGetBlock, get.Cnt)
 	go get.producer()
 	go get.consumer()
 
-	for get.Schedule.Percent() != 1 && get.FailCnt < 300 {
-		get.processBar.Process(int(get.Schedule.Percent()*100), get.Schedule.Speed())
-		// fmt.Println(get.Schedule.CompleteLength, get.Schedule.ContentLength, get.Schedule.Percent())
+	for get.Schedule.Percent() != 1 /*&& get.FailCnt < 300*/ {
+		// get.processBar.Process(int(get.Schedule.Percent()*100), get.Schedule.Speed())
+		get.processBar.Process(int(get.Schedule.Percent()*100), fmt.Sprintf("%s %d/%d %s", byten.Size(get.Schedule.DownloadBlock), len(get.jobs), cap(get.jobs), get.Schedule.Speed()))
+		// fmt.Println(len(get.jobs), cap(get.jobs), get.Cnt)
 		time.Sleep(1 * time.Second)
 	}
 	if get.Schedule.Percent() == 1 {
@@ -378,6 +378,39 @@ func (get *GoGet) Start(config *GoGetConfig) {
 	}
 	log.Printf("Download complete and store file %s. MD5: %x.\n", get.FilePath, h.Sum(nil))
 	get.DebugLog.Println("========================================")
+}
+
+func (get *GoGet) InitLen() error {
+	req, err := http.NewRequest("HEAD", get.Url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := get.GetClient.Do(req)
+	if err != nil {
+		log.Printf("Get %s error %v.\n", get.Url, err)
+		return err
+	}
+	get.Header = resp.Header
+	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(get.Header.Get("Content-Disposition"))
+	if resp.ContentLength <= 0 {
+		// log.Printf("ContentLength error", resp.ContentLength)
+		return fmt.Errorf("ContentLength error %d", resp.ContentLength)
+	}
+
+	get.raw = make([]byte, resp.ContentLength, resp.ContentLength)
+	get.Schedule = NewGoGetSchedules(resp.ContentLength)
+
+	if get.MediaParams["filename"] != "" {
+		get.FilePath += get.MediaParams["filename"]
+	} else if i := strings.LastIndex(get.Url, "/"); i != -1 && i+1 <= len(get.Url) {
+		get.FilePath += get.Url[i+1:]
+	} else {
+		hash := md5.New()
+		hash.Write([]byte(get.Url))
+		get.FilePath += base64.StdEncoding.EncodeToString(hash.Sum(nil))
+	}
+	return nil
 }
 
 func (get *GoGet) Stop() {
@@ -429,6 +462,8 @@ func init() {
 				// b, _ := json.Marshal(DEFAULT_GET)
 				// io.Copy(DEFAULT_GET.File, bytes.NewReader(b))
 				DEFAULT_GET.DebugLog.Println("========================================")
+				fmt.Println("")
+				fmt.Println("")
 				os.Exit(1)
 			}
 		}

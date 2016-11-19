@@ -61,7 +61,7 @@ func (this *ProcessBar) Process(processCnt int, message string) {
 		if this.ticker != nil {
 			this.ticker.Stop()
 		}
-		fmt.Println("100%", "[", strings.Repeat("=", this.percentWidth), "]", message)
+		fmt.Println("100%", "[", strings.Repeat("=", this.percentWidth), "]", message, "        ")
 		return
 	} else {
 		cnt := int(float32(processCnt) / this.percentDuration)
