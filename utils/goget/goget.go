@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	// "github.com/mnhkahn/cygo/container/interval"
 	"github.com/mnhkahn/cygo/utils/process_bar"
 	"github.com/pyk/byten"
 )
@@ -52,10 +53,32 @@ type GoGet struct {
 	DebugLog    *log.Logger
 }
 
-// 前开后闭区间？？？
+// 前闭后闭区间
 type GoGetBlock struct {
-	Start int64
-	End   int64
+	start int64
+	end   int64
+}
+
+func NewGoGetBlock(s, e int64) *GoGetBlock {
+	n := new(GoGetBlock)
+	n.start, n.end = s, e
+	return n
+}
+
+func (this *GoGetBlock) Start() int64 {
+	return this.start
+}
+
+func (this *GoGetBlock) End() int64 {
+	return this.end
+}
+
+func (this *GoGetBlock) SetStart(start int64) {
+	this.start = start
+}
+
+func (this *GoGetBlock) SetEnd(end int64) {
+	this.end = end
 }
 
 const (
@@ -65,7 +88,10 @@ const (
 )
 
 type GoGetSchedules struct {
-	processes      []byte
+	processes []byte
+	// noStartInterval *interval.Interval
+	// startedInterval *interval.Interval
+	// finishInterval  *interval.Interval
 	DownloadBlock  int64
 	ContentLength  int64
 	CompleteLength int64
@@ -112,24 +138,34 @@ func (this *GoGetSchedules) NextJob() *GoGetBlock {
 	var i int64
 	for i = 0; i < this.ContentLength; i++ {
 		if this.processes[i] == STATUS_NO_START {
-			job.Start = i
+			job.SetStart(i)
+			// job.Start = i
 			break
 		}
 	}
 
 	if i >= this.ContentLength {
-		job.Start = -1
-		job.End = -1
+		job.SetStart(-1)
+		job.SetEnd(-1)
+		// job.Start = -1
+		// job.End = -1
 		return job
 	}
 
-	job.End = job.Start + this.DownloadBlock
-	for i = job.Start; i-job.Start < this.DownloadBlock && i < this.ContentLength; i++ {
+	job.SetEnd(job.Start() + this.DownloadBlock)
+	if job.End()-job.Start() != 16384 {
+		fmt.Println("AAAAAAAAA", job.Start(), job.End())
+		panic(1)
+	}
+	// job.End = job.Start + this.DownloadBlock
+	for i = job.Start(); i-job.Start() < this.DownloadBlock && i < this.ContentLength; i++ {
 		if this.processes[i] == STATUS_FINISH {
-			job.End = i - 1
+			job.SetEnd(i - 1)
+			// job.End = i - 1
 			break
 		}
-		job.End = i
+		job.SetEnd(i)
+		// job.End = i
 		this.processes[i] = STATUS_START
 	}
 
@@ -140,10 +176,10 @@ func (this *GoGetSchedules) FinishJob(job *GoGetBlock) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	for i := job.Start; i < job.End; i++ {
+	for i := job.Start(); i < job.End(); i++ {
 		this.processes[i] = STATUS_FINISH
 	}
-	this.CompleteLength += (job.End - job.Start + 1)
+	this.CompleteLength += (job.End() - job.Start() + 1)
 }
 
 // func (this *GoGetSchedules) ResetJob(job *GoGetBlock) {
@@ -201,12 +237,12 @@ func (get *GoGet) producer() {
 	for {
 		job := get.Schedule.NextJob()
 
-		if job.Start == -1 && get.Schedule.IsComplete() {
+		if job.Start() == -1 && get.Schedule.IsComplete() {
 			break
 		}
-		if job.Start != -1 && job.End != -1 {
+		if job.Start() != -1 && job.End() != -1 {
 			get.jobs <- job
-		} else if job.Start == -1 && job.End == -1 {
+		} else if job.Start() == -1 && job.End() == -1 {
 			// downloadOnce = true
 			break
 		}
@@ -236,7 +272,7 @@ func (get *GoGet) Download(job *GoGetBlock) {
 		}
 	}()
 
-	range_i := fmt.Sprintf("%d-%d", job.Start, job.End)
+	range_i := fmt.Sprintf("%d-%d", job.Start(), job.End())
 
 	get.DebugLog.Printf("Download block [%s].", range_i)
 
@@ -261,16 +297,16 @@ func (get *GoGet) Download(job *GoGetBlock) {
 		}
 	} else {
 		res, err := ioutil.ReadAll(resp.Body)
-		if err != nil || int64(len(res)) != job.End-job.Start+1 {
+		if err != nil || int64(len(res)) != job.End()-job.Start()+1 {
 			get.FailCnt++
 			go get.Download(job)
 			// get.Schedule.ResetJob(job)
-			get.DebugLog.Printf("Download %s error %v, %d.\n", range_i, err)
+			get.DebugLog.Printf("Download %s error %v.\n", range_i, err)
 		} else {
 			get.FailCnt = 0
 			// Change to io.Copy
 			for i := 0; i < len(res); i++ {
-				get.raw[int64(i)+job.Start] = res[i]
+				get.raw[int64(i)+job.Start()] = res[i]
 			}
 			get.Schedule.FinishJob(job)
 		}
