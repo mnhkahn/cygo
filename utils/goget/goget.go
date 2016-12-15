@@ -153,10 +153,7 @@ func (this *GoGetSchedules) NextJob() *GoGetBlock {
 	}
 
 	job.SetEnd(job.Start() + this.DownloadBlock)
-	if job.End()-job.Start() != 16384 {
-		fmt.Println("AAAAAAAAA", job.Start(), job.End())
-		panic(1)
-	}
+
 	// job.End = job.Start + this.DownloadBlock
 	for i = job.Start(); i-job.Start() < this.DownloadBlock && i < this.ContentLength; i++ {
 		if this.processes[i] == STATUS_FINISH {
