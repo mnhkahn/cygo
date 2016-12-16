@@ -53,7 +53,7 @@ func Serve(addr string) {
 	}
 	defer ln.Close()
 
-	log.Printf("<<<Server Accepting on %s>>>\n", DEFAULT_SERVER.Addr.String())
+	log.Printf("<<<Server Accepting on Port %s>>>\n", DEFAULT_SERVER.Addr.Port())
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -95,6 +95,7 @@ func init() {
 
 	Router("/", "OPTIONS", &Controller{}, "Option")
 	Router("/favicon.ico", "GET", &Controller{}, "Favicon")
+	Router("/option", "GET", &Controller{}, "OptionMethod")
 }
 
 func handleConnection(conn net.Conn) {

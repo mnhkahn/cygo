@@ -165,3 +165,23 @@ func (this Values) Add(k, v string) {
 func (this Values) Get(param string) []string {
 	return this[param]
 }
+
+func ParseQuery(query string) Values {
+	m := make(Values)
+	var k, v string
+	var queryKeyValue = func(q string) {
+		k, v = "", ""
+		i := strings.Index(q, "=")
+		if i != -1 {
+			k = q[:i]
+			if i+1 <= len(q) {
+				v = q[i+1:]
+			}
+			m.Add(k, v)
+		}
+	}
+
+	cystr.SplitEachAfter(query, "&", queryKeyValue)
+
+	return m
+}

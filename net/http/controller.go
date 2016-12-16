@@ -7,9 +7,12 @@ import (
 	"io/ioutil"
 	"mime"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/template"
+
+	cyurl "github.com/mnhkahn/cygo/net/url"
 )
 
 var DEFAULT_CONTROLLER *Controller = new(Controller)
@@ -45,6 +48,27 @@ func (this *Controller) Option() {
 	this.Ctx.Resp.Headers.Add(HTTP_HEAD_ALLOW, strings.Join(allowMethods, ", "))
 }
 
+func (this *Controller) ParseForms(c interface{}) error {
+	querys := cyurl.ParseQuery(this.Ctx.Req.Body)
+	println(this.Ctx.Req.Body, "=============================")
+
+	v := reflect.Indirect(reflect.ValueOf(c))
+	t := v.Type()
+
+	for i := 0; i < t.NumField(); i++ {
+		if t.Field(i).Tag.Get("form") != "" {
+			if v.Field(i).CanSet() {
+				fs := querys.Get(t.Field(i).Tag.Get("form"))
+				if len(fs) > 0 {
+					v.Field(i).SetString(fs[0])
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (this *Controller) getString(param string) string {
 	if len(this.Ctx.Req.Url.Query().Get(param)) > 0 {
 		return this.Ctx.Req.Url.Query().Get(param)[0]
@@ -75,36 +99,32 @@ func (this *Controller) ServeJson(j interface{}) {
 }
 
 func (this *Controller) ServeView(params ...interface{}) {
-	if len(params) <= 0 {
+	if templ, exists := ViewsTemplFiles[params[0].(string)]; exists {
+		if len(params) == 1 {
+			this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, this.ContentType(filepath.Ext(params[0].(string))))
+			v, _ := ioutil.ReadFile(templ)
+			this.Ctx.Resp.Body = string(v)
+		} else if len(params) == 2 { // 模板
+			body := new(bytes.Buffer)
 
-	} else {
-		if templ, exists := ViewsTemplFiles[params[0].(string)]; exists {
-			if len(params) == 1 {
-				this.Ctx.Resp.Headers.Add(HTTP_HEAD_CONTENTTYPE, this.ContentType(filepath.Ext(params[0].(string))))
-				v, _ := ioutil.ReadFile(templ)
-				this.Ctx.Resp.Body = string(v)
-			} else if len(params) == 2 {
-				body := new(bytes.Buffer)
-
-				t, err := template.ParseFiles(templ)
-				if err != nil {
-					this.Ctx.Resp.Body = err.Error()
-					return
-				} else {
-					this.Ctx.Resp.Body = string(body.Bytes())
-				}
-
-				err = t.Execute(body, params[1])
-				if err != nil {
-					this.Ctx.Resp.Body = err.Error()
-				} else {
-					this.Ctx.Resp.Body = string(body.Bytes())
-				}
+			t, err := template.ParseFiles(templ)
+			if err != nil {
+				this.Ctx.Resp.Body = "ParseFiles error: " + err.Error()
+				return
+				// } else {
+				// this.Ctx.Resp.Body = string(body.Bytes())
 			}
-		} else {
-			this.debugLog(fmt.Sprintf("Can't find the template file %v", params))
-			ErrLog.Println("Can't find the template file", params)
+
+			err = t.Execute(body, params[1])
+			if err != nil {
+				this.Ctx.Resp.Body = err.Error()
+			} else {
+				this.Ctx.Resp.Body = string(body.Bytes())
+			}
 		}
+	} else {
+		this.debugLog(fmt.Sprintf("Can't find the template file %v", params))
+		ErrLog.Println("Can't find the template file", params)
 	}
 }
 
@@ -142,4 +162,8 @@ func (this *Controller) ContentType(ext string) string {
 		return ""
 	}
 	return mime.TypeByExtension(ext)
+}
+
+func (this *Controller) OptionMethod() {
+	this.ServeJson(DEFAULT_SERVER.Routes.routes)
 }
