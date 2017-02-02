@@ -166,6 +166,18 @@ func (this Values) Get(param string) []string {
 	return this[param]
 }
 
+func (this Values) String() string {
+	res := ""
+	for k, v := range this {
+		if len(res) == 0 {
+			res += k + "=" + v[0]
+		} else {
+			res += "&" + k + "=" + v[0]
+		}
+	}
+	return res
+}
+
 func ParseQuery(query string) Values {
 	m := make(Values)
 	var k, v string
